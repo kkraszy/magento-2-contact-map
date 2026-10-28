@@ -1,0 +1,52 @@
+<?php
+/**
+ * @var \Kkkonrad\ContactMap\Block\Adminhtml\Picker $block
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+?>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<div id="kk-contactmap-picker" style="height: 360px"></div>
+<?php
+// Loaded through RequireJS, not a <script> tag: the admin defines `define.amd`,
+// so Leaflet's UMD wrapper registers an anonymous module and never sets
+// `window.L` - a plain tag throws "Mismatched anonymous define()".
+// ponytail: no SRI on the JS (RequireJS builds the tag), version is pinned; vendor the file if that matters.
+$script = <<<'JS'
+require(['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'], function (L) {
+    var lat = document.getElementById('contact_map_latitude'),
+        lng = document.getElementById('contact_map_longitude'),
+        el = document.getElementById('kk-contactmap-picker'),
+        isSet = lat.value !== '' && lng.value !== '',
+        start = isSet ? [+lat.value, +lng.value] : [52.069, 19.48],
+        map = L.map(el).setView(start, isSet ? 16 : 6),
+        marker = L.marker(start, {draggable: true}).addTo(map);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    function pick(p) {
+        marker.setLatLng(p);
+        [[lat, p.lat], [lng, p.lng]].forEach(function (f) {
+            f[0].value = f[1].toFixed(6);
+            f[0].dispatchEvent(new Event('change', {bubbles: true}));
+        });
+    }
+    map.on('click', function (e) { pick(e.latlng); });
+    marker.on('dragend', function () { pick(marker.getLatLng()); });
+    [lat, lng].forEach(function (f) {
+        f.addEventListener('input', function () {
+            if (lat.value !== '' && lng.value !== '' && !isNaN(+lat.value) && !isNaN(+lng.value)) {
+                marker.setLatLng([+lat.value, +lng.value]);
+                map.panTo([+lat.value, +lng.value]);
+            }
+        });
+    });
+    // The group renders collapsed at 0x0; redraw tiles when it opens
+    new ResizeObserver(function () { map.invalidateSize(); }).observe(el);
+});
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', [], $script, false) ?>
